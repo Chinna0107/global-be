@@ -27,7 +27,7 @@ router.post('/login', async (req, res) => {
 // GET /api/admin/products
 router.get('/products', auth, async (req, res) => {
   try {
-    const products = await sql`SELECT *, id AS _id FROM products ORDER BY id`;
+    const products = await sql`SELECT * FROM products ORDER BY id`;
     res.json({ success: true, products });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -37,18 +37,19 @@ router.get('/products', auth, async (req, res) => {
 // POST /api/admin/products
 router.post('/products', auth, async (req, res) => {
   try {
-    const { name, category, description, image, price, unit = 'kg', stock = 0, features = [], quantities = [] } = req.body;
+    const { name, category, description, images = [], unit = 'kg', features = [], quantities = [] } = req.body;
     if (!name || !category) {
       return res.status(400).json({ success: false, message: 'name and category are required' });
     }
+    const cleanImages = images.filter(Boolean);
     const [product] = await sql`
-      INSERT INTO products (name, category, description, image, price, unit, stock, features, quantities)
+      INSERT INTO products (name, category, description, images, unit, features, quantities)
       VALUES (
-        ${name}, ${category.toLowerCase()}, ${description}, ${image},
-        ${price || null}, ${unit}, ${stock},
+        ${name}, ${category.toLowerCase()}, ${description},
+        ${JSON.stringify(cleanImages)}, ${unit},
         ${JSON.stringify(features)}, ${JSON.stringify(quantities)}
       )
-      RETURNING *, id AS _id
+      RETURNING *
     `;
     res.status(201).json({ success: true, product });
   } catch (err) {
@@ -59,20 +60,19 @@ router.post('/products', auth, async (req, res) => {
 // PUT /api/admin/products/:id
 router.put('/products/:id', auth, async (req, res) => {
   try {
-    const { name, category, description, image, price, unit, stock, features, quantities } = req.body;
+    const { name, category, description, images, unit, features, quantities } = req.body;
+    const cleanImages = images ? images.filter(Boolean) : null;
     const [product] = await sql`
       UPDATE products SET
         name        = COALESCE(${name ?? null}, name),
         category    = COALESCE(${category ? category.toLowerCase() : null}, category),
         description = COALESCE(${description ?? null}, description),
-        image       = COALESCE(${image ?? null}, image),
-        price       = COALESCE(${price ?? null}, price),
+        images      = COALESCE(${cleanImages ? JSON.stringify(cleanImages) : null}::jsonb, images),
         unit        = COALESCE(${unit ?? null}, unit),
-        stock       = COALESCE(${stock ?? null}, stock),
         features    = COALESCE(${features ? JSON.stringify(features) : null}::jsonb, features),
         quantities  = COALESCE(${quantities ? JSON.stringify(quantities) : null}::jsonb, quantities)
       WHERE id = ${req.params.id}
-      RETURNING *, id AS _id
+      RETURNING *
     `;
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
     res.json({ success: true, product });
